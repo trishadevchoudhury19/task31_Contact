@@ -6,5 +6,6 @@ router.post('/', controller.createContact);
 router.get('/:user_id', controller.getContacts);
 router.put('/:id', controller.updateContact);
 router.delete('/:id', controller.deleteContact);
+router.put('/:id/favorite', controller.toggleFavorite);
 
 module.exports = router;

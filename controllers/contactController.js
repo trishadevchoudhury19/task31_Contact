@@ -21,21 +21,32 @@ exports.createContact = async (req, res) => {
 
 exports.getContacts = async (req, res) => {
   const userId = req.params.user_id;
-  console.log("Received user_id:", userId); // 👈 Add this
+  const { favorite, search } = req.query;
+
+  let query = `
+    SELECT c.*, GROUP_CONCAT(t.name) AS tags
+    FROM contacts c
+    LEFT JOIN contact_tags ct ON c.id = ct.contact_id
+    LEFT JOIN tags t ON ct.tag_id = t.id
+    WHERE c.user_id = ?
+  `;
+  const params = [userId];
+
+  if (favorite === 'true') {
+    query += ' AND c.is_favorite = true';
+  }
+
+  if (search) {
+    query += ` AND (c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  query += ' GROUP BY c.id';
 
   try {
-    const [contacts] = await db.execute(
-      `SELECT c.*, GROUP_CONCAT(t.name) AS tags
-       FROM contacts c
-       LEFT JOIN contact_tags ct ON c.id = ct.contact_id
-       LEFT JOIN tags t ON ct.tag_id = t.id
-       WHERE c.user_id = ?
-       GROUP BY c.id`, [userId]);
-
-    console.log("Fetched contacts:", contacts); // 👈 Add this
+    const [contacts] = await db.execute(query, params);
     res.json(contacts);
   } catch (err) {
-    console.error("Error fetching contacts:", err); // 👈 This will show the real problem
     res.status(500).json({ error: err.message });
   }
 };
@@ -70,3 +81,23 @@ exports.deleteContact = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+// In contactController.js
+exports.toggleFavorite = async (req, res) => {
+  const contactId = req.params.id;
+  try {
+    const [result] = await db.execute('SELECT is_favorite FROM contacts WHERE id = ?', [contactId]);
+    if (result.length === 0) {
+      return res.status(404).json({ message: 'Contact not found' });
+    }
+
+    const currentStatus = result[0].is_favorite;
+    const newStatus = !currentStatus;
+
+    await db.execute('UPDATE contacts SET is_favorite = ? WHERE id = ?', [newStatus, contactId]);
+
+    res.json({ message: 'Favorite status updated', is_favorite: newStatus });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
